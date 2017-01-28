@@ -88,8 +88,12 @@ function WriteVhostConfigFile()
 
     # Listen is mandatory for each port <> 80 (80 is defined in system config)
     foreach ($customPortList as $port) {
-        $line .= "Listen " . $port . fs_filehandler::NewLine();
+        if($port !== 443){
+          $line .= "Listen " . $port . fs_filehandler::NewLine();
+        }
     }
+  
+    $line .= "Listen 443" . fs_filehandler::NewLine();
 
     $line .= fs_filehandler::NewLine();
     $line .= "# Configuration for Sentora control panel." . fs_filehandler::NewLine();
@@ -280,6 +284,7 @@ function WriteVhostConfigFile()
                 $RootDir = '"' . ctrl_options::GetSystemOption('hosted_dir') . $vhostuser['username'] . '/public_html' . $rowvhost['vh_directory_vc'] . '"';
 
                 $line .= "# DOMAIN: " . $rowvhost['vh_name_vc'] . fs_filehandler::NewLine();
+                $line .= "# HTTP. " . fs_filehandler::NewLine();
                 $line .= "<virtualhost " . $vhostIp . ":" . $vhostPort . ">" . fs_filehandler::NewLine();
 
                 /*
@@ -371,11 +376,194 @@ function WriteVhostConfigFile()
                 $line .= "# Custom VH settings (if any exist)" . fs_filehandler::NewLine();
                 $line .= $rowvhost['vh_custom_tx'] . fs_filehandler::NewLine();
 
-                // End Virtual Host Settings
+              
+              // End Virtual Host Settings
+                $line .= "################################################################" . fs_filehandler::NewLine();
                 $line .= "</virtualhost>" . fs_filehandler::NewLine();
+                $line .= "#END HTTP: " . $rowvhost['vh_name_vc'] . fs_filehandler::NewLine();
+              
+              
+              /*
+              
+              
+              
+              
+              END HTTP
+              
+              BEGIN HTTPS!
+              
+              
+              
+              
+              
+              */
+              
+              
+              
+                $line .= "################################################################" . fs_filehandler::NewLine();
+                $line .= "#Start HTTPS" . fs_filehandler::NewLine();
+                $line .= "################################################################" . fs_filehandler::NewLine();
+                $line .= "# HTTP. " . fs_filehandler::NewLine();
+                $line .= "<virtualhost " . $vhostIp . ":443>" . fs_filehandler::NewLine();
+
+                /*
+                 * todo
+                 */
+                // Bandwidth Settings
+                //$line .= "Include C:/Sentora/bin/apache/conf/mod_bw/mod_bw/mod_bw_Administration.conf" . fs_filehandler::NewLine();
+                // Server name, alias, email settings
+                $line .= "ServerName " . $rowvhost['vh_name_vc'] . fs_filehandler::NewLine();
+                if (!empty($serveralias))
+                    $line .= "ServerAlias " . $serveralias . fs_filehandler::NewLine();
+                $line .= "ServerAdmin " . $useremail . fs_filehandler::NewLine();
+                // Document root
+
+                $line .= 'DocumentRoot ' . $RootDir . fs_filehandler::NewLine();
+                // Get Package openbasedir and suhosin enabled options
+                if (ctrl_options::GetSystemOption('use_openbase') == "true") {
+                    if ($rowvhost['vh_obasedir_in'] <> 0) {
+                        $line .= 'php_admin_value open_basedir "' 
+                              . ctrl_options::GetSystemOption('hosted_dir') . $vhostuser['username'] . "/public_html" 
+                              . $rowvhost['vh_directory_vc'] . '/' . ctrl_options::GetSystemOption('openbase_seperator') 
+                              . ctrl_options::GetSystemOption('openbase_temp') . '"' . fs_filehandler::NewLine();
+                    }
+                }
+                if (ctrl_options::GetSystemOption('use_suhosin') == "true") {
+                    if ($rowvhost['vh_suhosin_in'] <> 0) {
+                        $line .= ctrl_options::GetSystemOption('suhosin_value') . fs_filehandler::NewLine();
+                    }
+                }
+                // Logs
+                if (!is_dir(ctrl_options::GetSystemOption('log_dir') . "domains/" . $vhostuser['username'] . "/")) {
+                    fs_director::CreateDirectory(ctrl_options::GetSystemOption('log_dir') . "domains/" . $vhostuser['username'] . "/");
+                }
+                $line .= 'ErrorLog "' . ctrl_options::GetSystemOption('log_dir') . "domains/" . $vhostuser['username'] . "/" . $rowvhost['vh_name_vc'] . '-error.log" ' . fs_filehandler::NewLine();
+                $line .= 'CustomLog "' . ctrl_options::GetSystemOption('log_dir') . "domains/" . $vhostuser['username'] . "/" . $rowvhost['vh_name_vc'] . '-access.log" ' . ctrl_options::GetSystemOption('access_log_format') . fs_filehandler::NewLine();
+                $line .= 'CustomLog "' . ctrl_options::GetSystemOption('log_dir') . "domains/" . $vhostuser['username'] . "/" . $rowvhost['vh_name_vc'] . '-bandwidth.log" ' . ctrl_options::GetSystemOption('bandwidth_log_format') . fs_filehandler::NewLine();
+
+                // Directory options
+               /* $line .= '<Directory ' . $RootDir . '>' . fs_filehandler::NewLine();
+                $line .= "  Options +FollowSymLinks -Indexes" . fs_filehandler::NewLine();
+                $line .= "  AllowOverride All" . fs_filehandler::NewLine();
+                $line .= "  Order Allow,Deny" . fs_filehandler::NewLine();
+                $line .= "  Allow from all" . fs_filehandler::NewLine();
+                $line .= "</Directory>" . fs_filehandler::NewLine();
+*/
+                // Get Package php and cgi enabled options
+                $rows = $zdbh->prepare("SELECT * FROM x_packages WHERE pk_id_pk=:packageid AND pk_deleted_ts IS NULL");
+                $rows->bindParam(':packageid', $vhostuser['packageid']);
+                $rows->execute();
+                $packageinfo = $rows->fetch();
+                if ($packageinfo['pk_enablephp_in'] <> 0) {
+                    $line .= ctrl_options::GetSystemOption('php_handler') . fs_filehandler::NewLine();
+                }
+# curently disabled because un secure
+# need correct cleaning in interface for full removal or in comment here until restoration
+#                if ( $packageinfo[ 'pk_enablecgi_in' ] <> 0 ) {
+#                     $line .= ctrl_options::GetSystemOption( 'cgi_handler' ) . fs_filehandler::NewLine();
+#                     if ( !is_dir( ctrl_options::GetSystemOption( 'hosted_dir' ) . $vhostuser[ 'username' ] . "/public_html" . $rowvhost[ 'vh_directory_vc' ] . "/_cgi-bin" ) ) {
+#                         fs_director::CreateDirectory( ctrl_options::GetSystemOption( 'hosted_dir' ) . $vhostuser[ 'username' ] . "/public_html" . $rowvhost[ 'vh_directory_vc' ] . "/_cgi-bin" );
+#                     }
+#                 }
+                // Error documents:- Error pages are added automatically if they are found in the _errorpages directory
+                // and if they are a valid error code, and saved in the proper format, i.e. <error_number>.html
+                $errorpages = ctrl_options::GetSystemOption('hosted_dir') . $vhostuser['username'] . "/public_html" . $rowvhost['vh_directory_vc'] . "/_errorpages";
+                if (is_dir($errorpages)) {
+                    if ($handle = opendir($errorpages)) {
+                        while (($file = readdir($handle)) !== false) {
+                            if ($file != "." && $file != "..") {
+                                $page = explode(".", $file);
+                                if (!fs_director::CheckForEmptyValue(CheckErrorDocument($page[0]))) {
+                                    $line .= "ErrorDocument " . $page[0] . " /_errorpages/" . $page[0] . ".html" . fs_filehandler::NewLine();
+                                }
+                            }
+                        }
+                        closedir($handle);
+                    }
+                }
+
+                // Directory indexes
+                $line .= ctrl_options::GetSystemOption('dir_index') . fs_filehandler::NewLine();
+
+                // Global custom global vh entry
+                $line .= "# Custom Global Settings (if any exist)" . fs_filehandler::NewLine();
+                $line .= ctrl_options::GetSystemOption('global_vhcustom') . fs_filehandler::NewLine();
+
+                // Client custom vh entry
+                $line .= "# Custom VH settings (if any exist)" . fs_filehandler::NewLine();
+                $line .= $rowvhost['vh_custom_tx'] . fs_filehandler::NewLine();
+                
+                
+              
+              // SSL Auto Activated.
+                $sslenabled = true;  
+                if($sslenabled){
+                  $certpath = "/etc/letsencrypt/live/" .  $rowvhost['vh_name_vc'];
+                  if(!is_dir($certpath) && count(dns_get_record($rowvhost['vh_name_vc'])) > 0){ 
+                    $command = ctrl_options::GetSystemOption('zsudo');
+                    $serveralias = ( $rowvhost['vh_type_in'] == 2 ) ? '' : " www." . $rowvhost['vh_name_vc'];
+                    $certbot_path = "/usr/bin/certbot-auto";
+                    if (empty($serveralias)){
+                      $args = array(
+                        "certonly",
+                        "--apache",
+                        "-d ".$rowvhost['vh_name_vc'],
+                        "-n"
+                      ); 
+                    } else {
+                      $args = array(
+                        "certonly",
+                        "--apache",
+                        "-d ".$rowvhost['vh_name_vc'],
+                        "-d ".$serveralias,
+                        "-n"
+                      ); 
+
+                    }
+                    echo "Executed certbot for " . $rowvhost["vh_name_vc"] . "\n";
+                    echo " --------------- " . "\n";
+                    echo ctrl_system::systemCommand($certbot_path, $args) . "\n";
+                    echo " --------------- " . "\n";
+                  } else {
+                    echo " --------------- " . "\n";
+                    echo "Certbot ommited for " . $rowvhost["vh_name_vc"] . "\n";
+                    // echo " --------------- " . "\n";
+                  }
+                  
+                  /*
+                    Start writing SSL config to vhost file
+                  
+                  */
+                  //$line .= "<If \"-f '/etc/letsencrypt/live/" . $rowvhost['vh_name_vc'] . "/README'\">" . fs_filehandler::NewLine(); // If is not prepared for initial load. Not supported. So, must do it from PHP
+                  
+                  
+                  if(is_dir($certpath)){  
+                    $line .= "  SSLEngine on" .  fs_filehandler::NewLine();
+                    $line .= "  SSLProtocol ALL -SSLv2 -SSLv3" .  fs_filehandler::NewLine();
+                    $line .= "  SSLHonorCipherOrder On" .  fs_filehandler::NewLine();
+                    $line .= "  SSLCipherSuite ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA" .  fs_filehandler::NewLine();;
+                    $line .= "  SSLCertificateFile " . $certpath . "/cert.pem" .  fs_filehandler::NewLine();
+                    $line .= "  SSLCertificateKeyFile " . $certpath . "/privkey.pem" .  fs_filehandler::NewLine();
+                    $line .= "  SSLCertificateChainFile " . $certpath . "/chain.pem" .  fs_filehandler::NewLine();
+                    //$line .= "  #SSLOptions +StrictRequire" .  fs_filehandler::NewLine();
+                    //$line .= "  # Requires Apache >= 2.4" .  fs_filehandler::NewLine();
+                    $line .= "  SSLCompression off" .  fs_filehandler::NewLine();
+                    //$line .= "</If>" .  fs_filehandler::NewLine();
+                  } else {
+                    // ERROR!! No SSL FILE FOUND!
+                    echo "#######################################################";
+                    echo "#####";
+                    echo "##### CAUTION! NO CERT FOR " . $rowvhost['vh_name_vc'];
+                    echo "#####";
+                  }
+                }
+              
                 $line .= "# END DOMAIN: " . $rowvhost['vh_name_vc'] . fs_filehandler::NewLine();
                 $line .= "################################################################" . fs_filehandler::NewLine();
+                $line .= "</virtualhost>" . fs_filehandler::NewLine();
                 $line .= fs_filehandler::NewLine();
+                
+              
                 if ($rowvhost['vh_portforward_in'] <> 0) {
                     $line .= BuildVhostPortForward($rowvhost['vh_name_vc'], $vhostPort, $useremail);
                 }
@@ -444,7 +632,7 @@ function WriteVhostConfigFile()
             );
             $returnValue = ctrl_system::systemCommand($command, $args);
         }
-
+        
         echo "Apache reload " . ((0 === $returnValue ) ? "suceeded" : "failed") . "." . fs_filehandler::NewLine();
     } else {
         return false;

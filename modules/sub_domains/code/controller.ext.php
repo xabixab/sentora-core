@@ -38,7 +38,75 @@ class module_controller extends ctrl_module
     static $badname;
     static $blank;
     static $ok;
+    
+	  static function TriggerDNSUpdate($id)
+    {
+        global $zdbh;
+        global $controller;
+        $records_list = ctrl_options::GetSystemOption('dns_hasupdates');
+        $record_array = explode(',', $records_list);
+        if (!in_array($id, $record_array)) {
+            if (empty($records_list)) {
+                $records_list .= $id;
+            } else {
+                $records_list .= ',' . $id;
+            }
+            $sql = "UPDATE x_settings SET so_value_tx=:newlist WHERE so_name_vc='dns_hasupdates'";
+            $sql = $zdbh->prepare($sql);
+            $sql->bindParam(':newlist', $records_list);
+            $sql->execute();
+            return true;
+        }
+    }
+		static function createDNSRecord(array $rec)
+    {
+        global $zdbh;
+        $sql = $zdbh->prepare('INSERT INTO x_dns (dn_acc_fk,
+                           dn_name_vc,
+                           dn_vhost_fk,
+                           dn_type_vc,
+                           dn_host_vc,
+                           dn_ttl_in,
+                           dn_target_vc,
+                           dn_priority_in,
+                           dn_weight_in,
+                           dn_port_in,
+                           dn_created_ts) VALUES (
+                           :userid,
+                           :domainName,
+                           :domainID,
+                           :type_new,
+                           :hostName_new,
+                           :ttl_new,
+                           :target_new,
+                           :priority_new,
+                           :weight_new,
+                           :port_new,
+                           :time)'
+        );
 
+        $priority_new = array_key_exists('priority', $rec) ? $rec['priority'] : 0;
+        $weight_new = array_key_exists('weight', $rec) ? $rec['weight'] : 0;
+        $port_new = array_key_exists('port', $rec) ? $rec['port'] : 0;
+        $time = array_key_exists('time', $rec) ? $rec['time'] : time();
+
+        $sql->bindParam(':userid', $rec['uid']);
+        $sql->bindParam(':domainName', $rec['domainName']);
+        $sql->bindParam(':domainID', $rec['domainID']);
+        $sql->bindParam(':type_new', $rec['type']);
+        $sql->bindParam(':hostName_new', $rec['hostName']);
+        $sql->bindParam(':ttl_new', $rec['ttl']);
+        $sql->bindParam(':target_new', $rec['target']);
+        $sql->bindParam(':priority_new', $priority_new);
+        $sql->bindParam(':weight_new', $weight_new);
+        $sql->bindParam(':port_new', $port_new);
+        $sql->bindParam(':time', $time);
+        $sql->execute();
+
+        self::TriggerDNSUpdate($rec['domainID']);
+    }
+	
+	
     /**
      * The 'worker' methods.
      */
